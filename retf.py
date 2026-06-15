@@ -11,7 +11,7 @@ pg.init()
 
 # Настройки экрана
 CELL_SIZE = 256
-CHUNK_SIZE = 32
+CHUNK_SIZE = 64
 map_test = {}
 sprites = {}
 
@@ -29,14 +29,14 @@ GRAY = (128, 128, 128)
 # Игрок
 pl_si = 64
 try:
-    pl_sprite = pg.image.load("unknown_game_DL/sprite/player.jpg")
+    pl_sprite = pg.image.load("unknown_game_DL/sprite/player.png")
     pl_sprite = pg.transform.scale(pl_sprite, (pl_si, pl_si))
 except:
     pl_sprite = pg.Surface((pl_si, pl_si))
     pl_sprite.fill(RED)
 
 player_size = pg.Rect(5 * pl_si, 5 * pl_si, pl_si, pl_si)
-speed = 700
+speed = 750
 
 # Камера
 camera_x0, camera_y0 = 0, 0
@@ -53,7 +53,84 @@ class Biomes:
         self.screen = screen
         self.pg = pg
         self.matrix = self.create_start_matrix()
-
+        self.sprites = {}
+        self.ground_sprites = []
+        self.load_all_sprites()
+        
+    def load_all_sprites(self):
+        """Загрузка всех спрайтов"""
+        sprite_files = {
+            BiomesType.SEA_SHORE: "unknown_game_DL/sprite/1000091955.jpg",
+            BiomesType.SEA: "unknown_game_DL/sprite/waterwaves.jpg" ,
+            BiomesType.SAND: "unknown_game_DL/sprite/1000091956.jpg",
+            BiomesType.WOODS: "unknown_game_DL/sprite/1000091954.jpg"
+        }
+            
+        for biome, path in sprite_files.items():
+            try:
+                sprite = pg.image.load(path)
+                sprite = pg.transform.scale(sprite, (CELL_SIZE, CELL_SIZE))
+                self.sprites[biome] = sprite
+                print(f"Загружен спрайт для {biome}")
+            except:
+                # Если спрайта нет, создаем цветной прямоугольник
+                print(f"Спрайт для {biome} не найден, использую цвет")
+                self.sprites[biome] = None
+        ground_textures = [
+            "unknown_game_DL/sprite/grass1.jpg",
+            "unknown_game_DL/sprite/grass2.jpg",
+            "unknown_game_DL/sprite/grass3.jpg"
+        ]
+        for path in ground_textures:
+            try:
+                sprite = pg.image.load(path)
+                sprite = pg.transform.scale(sprite, (CELL_SIZE, CELL_SIZE))
+                self.ground_sprites.append(sprite)
+                print(f"Загружен спрайт травы: {path}")
+            except:
+                # Если нет картинок, создаем вариации цветов
+                surf = pg.Surface((CELL_SIZE, CELL_SIZE))
+                # Разные оттенки зеленого
+                green_variations = [
+                    (34, 139, 34),   # Обычный зеленый
+                    (40, 150, 40),   # Светлее
+                    (28, 128, 28),   # Темнее
+                    (45, 155, 45)    # Ярче
+                ]
+                for i, color in enumerate(green_variations):
+                    surf.fill(color)
+                    self.ground_sprites.append(surf.copy())
+                print(f"Созданы текстуры травы (заглушки)")
+                break
+    
+    def get_biome_sprite(self, biome, x=None, y=None):
+        
+        if biome == BiomesType.LAND:
+            if self.ground_sprites:
+                # Используем позицию для детерминированного выбора
+                if x is not None and y is not None:
+                    # Один и тот же тайл всегда будет одинаковым
+                    index = (x * 7 + y * 13) % len(self.ground_sprites)
+                    return self.ground_sprites[index]
+                else:
+                    # Случайный выбор
+                    return random.choice(self.ground_sprites)
+            else:
+                # Если нет спрайтов, возвращаем цвет
+                color = self.get_color(biome)
+                surf = pg.Surface((CELL_SIZE, CELL_SIZE))
+                surf.fill(color)
+                return surf
+        
+        # Для остальных биомов - обычные спрайты
+        sprite = self.sprites.get(biome)
+        if sprite is not None:
+            return sprite
+        
+        color = self.get_color(biome)
+        surf = pg.Surface((CELL_SIZE, CELL_SIZE))
+        surf.fill(color)
+    
     def main_render_biomes(self):
         start = time.time()
         self.set_layout_lands_and_sea()  # Шаг 1: Создаем континенты
@@ -73,7 +150,7 @@ class Biomes:
             BiomesType.SEA_SHORE: 0,
             BiomesType.WOODS: 0
         }
-        
+
         for row in self.matrix:
             for cell in row:
                 stats[cell] += 1
@@ -154,20 +231,12 @@ class Biomes:
             for y in range(cols):
                 if self.matrix[x][y] == BiomesType.LAND:
                     if random.randint(1, 3) == 1:  # 33% шанс леса
-                        tree_size = random.randint(20, 40)
-                        # Смещение внутри тайла
-                        offset_x = random.randint(0, CELL_SIZE - tree_size)
-                        offset_y = random.randint(0, CELL_SIZE - tree_size)
-                        self.trees.append((x, y, tree_size, offset_x, offset_y))
-                    
-                elif self.matrix[x][y] == BiomesType.WOODS:
-                    # В лесу больше деревьев (3-6 штук)
-                    num_trees = random.randint(3, 6)
-                    for _ in range(num_trees):
-                        tree_size = random.randint(20, 40)
-                        offset_x = random.randint(0, CELL_SIZE - tree_size)
-                        offset_y = random.randint(0, CELL_SIZE - tree_size)
-                        self.trees.append((x, y, tree_size, offset_x, offset_y))
+                        self.matrix[x][y] = BiomesType.WOODS
+        
+        # Несколько проходов для сглаживания лесов
+        for _ in range(5):
+            self.next_generation(BiomesType.LAND, BiomesType.WOODS, [5,6,7,8])
+            self.next_generation(BiomesType.WOODS, BiomesType.LAND, [1,2])
 
     # -------------------- UTILS --------------------
     def create_start_matrix(self):
@@ -198,8 +267,12 @@ class Biomes:
         }
         return colors.get(biome, BLACK)
 
+
+        
+
+    
     def draw(self, screen, camera_x, camera_y):
-        """Отрисовывает видимую часть карты"""
+        """Отрисовка всех тайлов спрайтами"""
         rows, cols = len(self.matrix), len(self.matrix[0])
         
         start_x = max(0, camera_x // CELL_SIZE)
@@ -213,17 +286,23 @@ class Biomes:
                 screen_y = y * CELL_SIZE - camera_y
                 
                 if -CELL_SIZE <= screen_x < WIDTH and -CELL_SIZE <= screen_y < HEIGHT:
-                    color = self.get_color(self.matrix[y][x])
-                    pg.draw.rect(screen, color, (screen_x, screen_y, CELL_SIZE, CELL_SIZE))
+                    biome = self.matrix[y][x]
+                    sprite = self.get_biome_sprite(biome)
+                    screen.blit(sprite, (screen_x, screen_y))
+
 
 # Создаем экземпляр биомов
 print("Создание карты...")
 biomes = Biomes(screen, pg)
 biomes.main_render_biomes()
 
+pig = pg.image.load("unknown_game_DL/sprite/Sprite-0001.png")
+pig_x, pig_y = 250, 250
+
+
 # Загрузка спрайта стены
 try:
-    wall_sprite = pg.image.load("unknown_game_DL/sprite/Sprite-0002.jpg")
+    wall_sprite = pg.image.load("unknown_game_DL/sprite/wall.png")
     wall_sprite = pg.transform.scale(wall_sprite, (CELL_SIZE, CELL_SIZE))
 except:
     wall_sprite = pg.Surface((CELL_SIZE, CELL_SIZE))
@@ -232,6 +311,9 @@ except:
 # Стены
 wall1 = pg.Rect(5 * CELL_SIZE, 5 * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 wall2 = pg.Rect(10 * CELL_SIZE, 10 * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+
+
+
 
 # Игровой цикл
 clock = pg.time.Clock()
@@ -248,17 +330,45 @@ while running:
                 running = False
     
     old_x, old_y = player_size.x, player_size.y
+    def get_speed_multiplier(biomes, player, CELL_SIZE):
+        """Получить множитель скорости в зависимости от тайла под игроком"""
+        # Определяем тайл под центром игрока
+        player_center_x = player.x + player.width // 2
+        player_center_y = player.y + player.height // 2
+        
+        tile_x = player_center_x // CELL_SIZE
+        tile_y = player_center_y // CELL_SIZE
+        
+        # Проверяем границы
+        if 0 <= tile_y < len(biomes.matrix) and 0 <= tile_x < len(biomes.matrix[0]):
+            biome = biomes.matrix[tile_y][tile_x]
+            
+            # Если на воде (море или мелководье) - замедление
+            if biome in [BiomesType.SEA, BiomesType.SEA_SHORE]:
+                return 0.6  # Скорость 60% от обычной
+            else:
+                return 1.0  # Нормальная скорость
+        return 1.0
     
+    speed_multiplier = get_speed_multiplier(biomes, player_size, CELL_SIZE)
+
     keys = pg.key.get_pressed()
     if keys[pg.K_LEFT] or keys[pg.K_a]: 
-        player_size.x -= speed * dt
+        player_size.x -= speed * speed_multiplier * dt
     if keys[pg.K_RIGHT] or keys[pg.K_d]: 
-        player_size.x += speed * dt 
+        player_size.x += speed * speed_multiplier * dt 
     if keys[pg.K_UP] or keys[pg.K_w]: 
-        player_size.y -= speed * dt
+        player_size.y -= speed * speed_multiplier * dt
     if keys[pg.K_DOWN] or keys[pg.K_s]: 
-        player_size.y += speed * dt
+        player_size.y += speed * speed_multiplier * dt
     
+    map_width = len(biomes.matrix[0]) * CELL_SIZE
+    map_height = len(biomes.matrix) * CELL_SIZE
+    
+    # Ограничиваем позицию игрока границами карты
+    player_size.x = max(0, min(player_size.x, map_width - player_size.width))
+    player_size.y = max(0, min(player_size.y, map_height - player_size.height))
+
     # Коллизии
     if player_size.colliderect(wall1) or player_size.colliderect(wall2):
         player_size.x, player_size.y = old_x, old_y
@@ -272,6 +382,10 @@ while running:
     camera_x0 = max(0, min(camera_x0, max_camera_x))
     camera_y0 = max(0, min(camera_y0, max_camera_y))
     
+    #Ограничение позиции игрока, чтобы он не выходил за пределы экрана
+    player_x = max(0, min(player_size.x, settings.Columns - pl_si))
+    player_y = max(0, min(player_size.y, settings.Rows - pl_si))
+        
     # Отрисовка
     screen.fill(BLACK)
     biomes.draw(screen, camera_x0, camera_y0)
@@ -280,6 +394,7 @@ while running:
     screen.blit(wall_sprite, (wall1.x - camera_x0, wall1.y - camera_y0))
     screen.blit(wall_sprite, (wall2.x - camera_x0, wall2.y - camera_y0))
     
+
     # Игрок
     screen.blit(pl_sprite, (player_size.x - camera_x0, player_size.y - camera_y0))
     
