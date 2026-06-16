@@ -334,12 +334,11 @@ except:
     wall_sprite = pg.Surface((CELL_SIZE, CELL_SIZE))
     wall_sprite.fill(GRAY)
 
+
+    
 # Стены
 wall1 = pg.Rect(5 * CELL_SIZE, 5 * CELL_SIZE, CELL_SIZE, CELL_SIZE)
 wall2 = pg.Rect(10 * CELL_SIZE, 10 * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-
-
-
 
 # Игровой цикл
 clock = pg.time.Clock()
@@ -357,6 +356,8 @@ while running:
     
     old_x, old_y = player_size.x, player_size.y
     
+
+
     def get_speed_multiplier(biomes, player, CELL_SIZE):
         """Получить множитель скорости в зависимости от тайла под игроком"""
         # Определяем тайл под центром игрока
@@ -399,7 +400,17 @@ while running:
     # Коллизии
     if player_size.colliderect(wall1) or player_size.colliderect(wall2):
         player_size.x, player_size.y = old_x, old_y
-    
+    for tree_x, tree_y in biomes.tree_positions:
+        # Сужаем хитбокс дерева: ствол в центре клетки
+        trunk_width = CELL_SIZE // 4
+        trunk_height = CELL_SIZE // 3
+        trunk_x = tree_x * CELL_SIZE + (CELL_SIZE - trunk_width) // 2
+        trunk_y = tree_y * CELL_SIZE + CELL_SIZE // 2  # ствол внизу
+        
+        tree_rect = pg.Rect(trunk_x, trunk_y, trunk_width, trunk_height)
+        if player_size.colliderect(tree_rect):
+            player_size.x, player_size.y = old_x, old_y
+            break
     # Камера
     camera_x0 = player_size.x - WIDTH // 2
     camera_y0 = player_size.y - HEIGHT // 2
